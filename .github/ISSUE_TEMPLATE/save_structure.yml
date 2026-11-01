@@ -1,0 +1,28 @@
+name: Real key names / Реальные названия полей сейва
+description: Help the editor recognise inventory, events and the premium pass correctly
+labels: [sections]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Open your save, go to **All data (advanced)** and tell us how things are really named.
+        Откройте сейв → «Все данные» и подскажите, как поля называются на самом деле.
+  - type: input
+    id: inv
+    attributes:
+      label: Inventory path / Путь к инвентарю
+      placeholder: "progress_data.inventory"
+  - type: input
+    id: item
+    attributes:
+      label: One item example (without personal data) / Пример предмета
+      placeholder: '{"name": "...", "count": 3, "shiny": false}'
+  - type: input
+    id: ev
+    attributes:
+      label: Event + premium pass field / Ивент и поле премиум-пропуска
+      placeholder: "progress_data.events.<name>.pp"
+  - type: input
+    id: ver
+    attributes:
+      label: Game version / Версия игры

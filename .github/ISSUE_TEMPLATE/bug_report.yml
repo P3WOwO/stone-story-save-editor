@@ -1,0 +1,23 @@
+name: Bug report / Сообщить об ошибке
+description: Something does not work
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened? / Что случилось?
+      description: Steps to reproduce, what you expected. / Что вы делали и что ожидали.
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Editor version, game version, OS / Версии
+      placeholder: "editor 2.1.0, game 4.33.0, Windows 11"
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error text or screenshot / Текст ошибки или скриншот
+  - type: markdown
+    attributes:
+      value: "**Do not attach your real save file** if it contains anything personal. / Не прикладывайте сейв, если не уверены."
