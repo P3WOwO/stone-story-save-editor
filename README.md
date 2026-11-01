@@ -1,0 +1,125 @@
+<p align="center"><img src="docs/banner.png" alt="Stone Story RPG Save Editor" width="860"></p>
+
+<p align="center">
+  <img alt="License" src="https://img.shields.io/badge/license-MIT-blue">
+  <img alt="Python" src="https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white">
+  <img alt="Platform" src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey">
+  <img alt="Languages" src="https://img.shields.io/badge/UI-RU%20%7C%20EN-green">
+</p>
+
+# Stone Story RPG Save Editor
+
+🇷🇺 [Читать по-русски](README_RU.md)
+
+A friendly, safe save editor for **Stone Story RPG**. It decrypts your save, shows every value as an easy card
+(or as a classic list), lets you change it, then encrypts and verifies the file again.
+No programming knowledge needed.
+
+![Inventory](docs/screenshot-inventory.png)
+![Events and premium pass](docs/screenshot-events.png)
+
+<details>
+<summary>More screenshots (cards, dark theme, list view, welcome screen)</summary>
+
+![Cards view](docs/screenshot-cards-light.png)
+![Dark theme](docs/screenshot-cards-dark.png)
+![List view](docs/screenshot-list.png)
+![Welcome screen](docs/screenshot-welcome.png)
+
+*Screenshots use a fake demo save with invented data.*
+</details>
+
+## Features
+
+- **Sections** – Inventory, Events & pass, Player, Resources, Quests, Progress, Locations, Cosmetics, Time, Other. Pick a section and see only its values.
+- **Inventory manager** – a card per item: amount (`−` / `+`, quick `+10`, `+100`, `×2`), tick boxes (e.g. *shiny*), stars/enchant fields, add / duplicate / delete items, change the amount of all shown items at once, clear the inventory.
+- **Events & premium pass** – a *Premium pass* switch (the `pp` field) for every event, one-click **Give premium pass everywhere**, points/levels of the reward track for all events at once.
+- **Cards view** – each value is a card with an icon, `−` / `+` buttons, quick-add chips (`+10`, `+100`, `×2`) and Yes/No switches.
+- **List view** – a table of all values with an edit panel; select several numbers and change them at once.
+- **Search & filters** – numbers, Yes/No, text, "changed only".
+- **Safe by design** – a dated `.bak` backup before every save, the result is decrypted again and compared, and the file is written atomically. If verification fails, nothing is written.
+- **Undo / Redo**, a **Changes** tab with per-change restore, "Restore from backup".
+- **Find my save automatically**, recent files.
+- **Light and dark themes**, **Russian and English** interface.
+- *All data (advanced)* tab: the full tree, add/delete fields, edit raw JSON.
+
+## Quick start (Windows)
+
+1. Install [Python 3.10+](https://www.python.org/downloads/) – tick **"Add Python to PATH"**.
+2. Download this repository (green **Code → Download ZIP**) and unpack it.
+3. Double-click **`start.bat`**. The first start installs one small library (internet needed once).
+4. Close the game, click **Open save file** (or **Find my save automatically**), edit, click **Save**.
+
+Prefer no Python? Download `StoneStorySaveEditor.exe` from the **Releases** page (built by GitHub Actions).
+
+### Linux / macOS
+
+```bash
+# Linux only: sudo apt install python3-tk
+./start.sh
+```
+
+### From source
+
+```bash
+pip install -r requirements.txt
+python -m stone_story_editor [path/to/save.txt]
+```
+
+## Where is my save file?
+
+Use **Find my save automatically**. According to the game's official FAQ the file is `primary_save.txt` in:
+
+- Windows: `C:\Users\<you>\AppData\LocalLow\Martian Rex, Inc_\Stone Story\<steam id>\`
+- macOS: `~/Library/Application Support/Martian Rex, Inc_/Stone Story/<steam id>/`
+- Linux: `<Steam install>/Stone Story RPG/saves/<steam id>/`
+
+The game also keeps `backup.txt` and `historical_#` files there.
+
+## About the sections
+
+The save's field names are not officially documented, so sections are detected from **key words**
+(`inventory`, `event`, `pp`, `premium`, `quest` ...). Nothing is hidden: unrecognised values land in *Other*, and the
+**Plain cards** button on the Inventory / Events pages shows every value of the section.
+If the game uses a word the editor does not know, add it to the `RULES` table at the top of
+`stone_story_editor/sections.py` (pull requests with real key names are very welcome!).
+
+## Important
+
+- **Close the game** before saving, otherwise it may overwrite your changes.
+- Only the local file is changed. Purchases, subscriptions and server-verified data are not granted.
+- Huge numbers (over ~2 billion) may break the game; the editor warns you.
+- Keep your `.bak` files until you are sure the game loads the edited save.
+- Unofficial tool, **use at your own risk**. Not affiliated with the game's developers.
+- The encryption format matches game version **4.33.0**. If the game changes it, the editor needs an update.
+- `pprp` is pinned to **0.2.6** on purpose – do not upgrade to 0.2.7.
+
+## Development
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest            # unit tests (parser, encryption, undo/redo, i18n)
+python tests/sample_save.py demo_save.txt   # fake save to try the editor
+build_exe.bat               # Windows: build dist/StoneStorySaveEditor.exe
+```
+
+Project layout:
+
+| File | Purpose |
+|------|---------|
+| `stone_story_editor/core.py` | parser, encryption, safe saving, diff, undo/redo (no GUI) |
+| `stone_story_editor/gui.py` | tkinter interface (sections sidebar, cards, list, tree, changes) |
+| `stone_story_editor/views.py` | inventory manager and events / premium pass view |
+| `stone_story_editor/sections.py` | key-word based section detection (no GUI) |
+| `stone_story_editor/cards.py` | value cards (icon, +/- buttons, switches) |
+| `stone_story_editor/i18n.py` | Russian / English texts and help |
+| `stone_story_editor/theme.py` | light / dark palettes |
+| `stone_story_editor/finder.py` | automatic save search |
+| `tests/` | tests and the fake demo save generator |
+
+To publish releases: push a tag such as `v2.0.0`; the workflow in `.github/workflows/release.yml` attaches the `.exe`.
+
+## Credits & license
+
+Encryption parameters follow the publicly documented save format (SSRPGS cryptor). Uses
+[`pprp`](https://pypi.org/project/pprp/) for Rijndael-256. Released under the [MIT License](LICENSE).

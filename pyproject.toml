@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "stone-story-save-editor"
+version = "2.1.0"
+description = "Friendly save editor for Stone Story RPG (decrypts, edits and re-encrypts saves safely)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = ["pprp==0.2.6"]
+
+[project.gui-scripts]
+stone-story-save-editor = "stone_story_editor.gui:run"
+
+[tool.setuptools]
+packages = ["stone_story_editor"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
