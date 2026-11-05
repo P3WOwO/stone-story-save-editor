@@ -882,7 +882,7 @@ HELP: dict[str, list[tuple[str, str]]] = {
 
 • Слишком большие числа (больше ~2 миллиардов) могут сломать игру — программа предупредит об этом.
 
-• Это неофициальная программа, использовать на свой риск. Формат шифрования подогнан под версию игры 4.33.0; если игра обновит формат, редактор придётся обновить.
+• Это неофициальная программа, использовать на свой риск. Работает с актуальной версией игры; если будущее обновление изменит шифрование сейвов, редактор придётся обновить.
 
 • Сочетания клавиш: Ctrl+O открыть · Ctrl+S сохранить · Ctrl+Z отменить · Ctrl+Y вернуть · Ctrl+F поиск · F1 помощь.
 """),
@@ -943,7 +943,7 @@ The save's field names are not officially documented, so sections are detected f
 
 • Very large numbers (above ~2 billion) can break the game - the program will warn you.
 
-• This is an unofficial tool, use it at your own risk. The encryption format matches game version 4.33.0; if the game changes the format the editor will need an update.
+• This is an unofficial tool, use it at your own risk. It works with the current version of the game; if a future update changes the save encryption, the editor will need an update.
 
 • Shortcuts: Ctrl+O open · Ctrl+S save · Ctrl+Z undo · Ctrl+Y redo · Ctrl+F search · F1 help.
 """),

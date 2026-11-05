@@ -20,7 +20,7 @@ from typing import Any, Iterator
 
 SLOT_RE = re.compile(r"^save_file_\d+$")
 
-# Constants match the encrypted save format of game version 4.33.0
+# Constants match the encrypted save format of the current game version
 # (and the public SSRPGS cryptor implementation).
 _CIPHER_PASSWORD = b"peekabeyoufoundme"
 _CIPHER_SALT_PREFIX = base64.b64decode("MADE/BY/CATALYST/42/")

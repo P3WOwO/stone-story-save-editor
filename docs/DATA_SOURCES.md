@@ -16,6 +16,11 @@ nothing, the editor shows "not described" or leaves the value unknown.
 | Star level 0-10, enchantment +1...+21 and colours, level 0-60, save folders | game FAQ and wiki Glossary / Enchantments |
 | Premium pass (`pp`), 35 points per track (50 in Green Part 1 & 2), 30 Event Tickets | wiki Events + SSRPGS field names |
 
+## Game version
+
+Encryption and decryption of saves are confirmed to work with the current game release. Item and field data come from
+the sources above and may lag behind new game content.
+
 ## What is deliberately unknown
 
 * Items without a confirmed ID (shown grey in the catalogue, ID `—`) cannot be added from the catalogue.

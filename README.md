@@ -106,7 +106,7 @@ If the game uses a word the editor does not know, add it to the `RULES` table at
 - Huge numbers (over ~2 billion) may break the game; the editor warns you.
 - Keep your `.bak` files until you are sure the game loads the edited save.
 - Unofficial tool, **use at your own risk**. Not affiliated with the game's developers.
-- The encryption format matches game version **4.33.0**. If the game changes it, the editor needs an update.
+- Works with the current version of the game (tested on the latest Steam release). If a future update changes the save encryption, the editor will need an update.
 - `pprp` is pinned to **0.2.6** on purpose – do not upgrade to 0.2.7.
 
 ## Development
