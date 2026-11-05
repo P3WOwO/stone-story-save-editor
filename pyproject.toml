@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "stone-story-save-editor"
-version = "2.1.0"
+version = "2.2.0"
 description = "Friendly save editor for Stone Story RPG (decrypts, edits and re-encrypts saves safely)"
 readme = "README.md"
 requires-python = ">=3.10"

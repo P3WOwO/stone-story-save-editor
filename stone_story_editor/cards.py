@@ -8,6 +8,8 @@ from tkinter import ttk
 from . import core, sections
 from .common import fmt_num
 from .i18n import tr
+from tkinter import messagebox
+
 from .widgets import Tooltip, ValueDialog
 
 
@@ -48,11 +50,32 @@ def smart_step(value: Any) -> Any:
     return 10 ** max(len(str(int(a))) - 2, 1)
 
 
+def guard_range(app, new: Any, limits: tuple | None) -> bool:
+    """Ask before a number leaves the range the game documents (e.g. level 0-60)."""
+    if not limits or not isinstance(new, (int, float)) or limits[0] <= new <= limits[1]:
+        return True
+    return messagebox.askyesno(tr("range_title"), tr("range_warn", lo=limits[0], hi=limits[1], v=fmt_num(new)),
+                               icon="warning", parent=app)
+
+
+def paint_switch(canvas: tk.Canvas, on: bool, pal: dict) -> str:
+    canvas.delete("all")
+    color = pal["ok"] if on else pal["muted"]
+    canvas.create_oval(2, 2, 28, 26, fill=color, outline=color)
+    canvas.create_oval(28, 2, 54, 26, fill=color, outline=color)
+    canvas.create_rectangle(15, 2, 41, 26, fill=color, outline=color)
+    x = 31 if on else 5
+    canvas.create_oval(x, 5, x + 20, 25, fill="#ffffff", outline="")
+    return color
+
+
 class ValueCard(tk.Frame):
     """One value shown as a friendly card: icon, name and the right control for its type."""
 
-    def __init__(self, parent, tab: "SimpleTab", path: tuple, name: str, section: str, value: Any):
+    def __init__(self, parent, tab: "SimpleTab", path: tuple, name: str, section: str, value: Any,
+                 hint: str | None = None, icon: tuple[str, str] | None = None, limits: tuple | None = None):
         self.tab, self.app, self.path = tab, tab.app, path
+        self.limits = limits
         self.pal = pal = tab.app.pal
         self.kind = core.kind_of(value)
         self._bgw: list[tk.Widget] = []
@@ -61,7 +84,7 @@ class ValueCard(tk.Frame):
         self._bgw.append(self)
         head = self._frame(self)
         head.pack(fill="x")
-        symbol, color = icon_for(path, self.kind)
+        symbol, color = icon or icon_for(path, self.kind)
         icon = tk.Canvas(head, width=40, height=40, bg=pal["card"], highlightthickness=0)
         icon.create_oval(2, 2, 38, 38, fill=color, outline="")
         icon.create_text(20, 20, text=symbol, fill="#ffffff", font="SSEIcon")
@@ -72,6 +95,11 @@ class ValueCard(tk.Frame):
         self._label(texts, name, font="SSEBold", fg=pal["text"], wraplength=170).pack(anchor="w", fill="x")
         if section:
             self._label(texts, section, font="SSESmall", fg=pal["muted"], wraplength=170).pack(anchor="w", fill="x")
+        if hint:
+            info_btn = ttk.Button(head, text="?", width=2, style="Quick.TButton",
+                                  command=lambda: messagebox.showinfo(name, hint, parent=self.app))
+            info_btn.pack(side="right", anchor="n", padx=(4, 0))
+            Tooltip(info_btn, hint, pal)
         self.restore_btn = ttk.Button(head, text="↺", width=3, style="Quick.TButton", command=self._restore)
         Tooltip(self.restore_btn, tr("restore_original"), pal)
         self.body = self._frame(self)
@@ -150,16 +178,24 @@ class ValueCard(tk.Frame):
             self.app.apply_set([self.path], lambda _o: dlg.result)
 
     # ---- actions ----
-    def _bump(self, sign: int) -> None:
+    def _apply_number(self, fn) -> None:
         try:
             cur = self._current()
         except (KeyError, IndexError):
             return
-        step = smart_step(cur)
-        self.app.apply_set([self.path], lambda old: self.app.coerce_number(old, round(old + sign * step, 10)))
+        new = self.app.coerce_number(cur, fn(cur))
+        if guard_range(self.app, new, self.limits):
+            self.app.apply_set([self.path], lambda _o: new)
+
+    def _bump(self, sign: int) -> None:
+        try:
+            step = smart_step(self._current())
+        except (KeyError, IndexError):
+            return
+        self._apply_number(lambda old: round(old + sign * step, 10))
 
     def _quick(self, op: str, n: int) -> None:
-        self.app.apply_set([self.path], lambda old: self.app.coerce_number(old, old + n if op == "add" else old * n))
+        self._apply_number(lambda old: old + n if op == "add" else old * n)
 
     def _toggle(self) -> None:
         self.app.apply_set([self.path], lambda old: not old)
@@ -175,7 +211,7 @@ class ValueCard(tk.Frame):
         try:
             if self.kind == "number":
                 new = core.parse_typed("number", raw)
-                self.app.apply_set([self.path], lambda old: self.app.coerce_number(old, new))
+                self._apply_number(lambda _old: new)
             else:
                 self.app.apply_set([self.path], lambda _o: raw)
         except ValueError:
@@ -222,12 +258,175 @@ class ValueCard(tk.Frame):
             self._draw_switch(bool(value), bg)
 
     def _draw_switch(self, on: bool, bg: str) -> None:
-        c = self.switch
-        c.delete("all")
-        color = self.pal["ok"] if on else self.pal["muted"]
-        c.create_oval(2, 2, 28, 26, fill=color, outline=color)
-        c.create_oval(28, 2, 54, 26, fill=color, outline=color)
-        c.create_rectangle(15, 2, 41, 26, fill=color, outline=color)
-        x = 31 if on else 5
-        c.create_oval(x, 5, x + 20, 25, fill="#ffffff", outline="")
+        color = paint_switch(self.switch, on, self.pal)
         self.switch_label.configure(text=tr("yes") if on else tr("no"), fg=color)
+
+
+class NumberStepper(tk.Frame):
+    """[-] [ number ] [+] with quick-add chips. Bound to a path in the save, or to get/put callbacks."""
+
+    def __init__(self, parent, app, path: tuple | None, bg: str, chips: bool = True, get=None, put=None,
+                 limits: tuple | None = None):
+        super().__init__(parent, bg=bg)
+        self.app, self.path, self.get, self.put, self.limits = app, path, get, put, limits
+        self.var = tk.StringVar()
+        row = tk.Frame(self, bg=bg)
+        row.pack(fill="x")
+        ttk.Button(row, text="−", width=3, style="Quick.TButton", command=lambda: self._bump(-1)).pack(side="left")
+        self.entry = ttk.Entry(row, textvariable=self.var, justify="center", width=8, font="SSEEntry")
+        self.entry.pack(side="left", fill="x", expand=True, padx=6, ipady=2)
+        ttk.Button(row, text="+", width=3, style="Quick.TButton", command=lambda: self._bump(1)).pack(side="left")
+        self.entry.bind("<Return>", lambda _e: self._commit())
+        self.entry.bind("<FocusOut>", lambda _e: self._commit())
+        if chips:
+            crow = tk.Frame(self, bg=bg)
+            crow.pack(fill="x", pady=(8, 0))
+            for text, op, n in (("+10", "add", 10), ("+100", "add", 100), ("×2", "mul", 2), ("= 0", "set", 0)):
+                ttk.Button(crow, text=text, style="Quick.TButton", width=5,
+                           command=lambda op=op, n=n: self._quick(op, n)).pack(side="left", padx=(0, 4))
+        self.refresh()
+
+    def _cur(self) -> Any:
+        if self.get:
+            return self.get()
+        return core.get_at(self.app.root_data[self.app.current_slot], self.path)
+
+    def refresh(self) -> None:
+        try:
+            if self.focus_get() is not self.entry:
+                self.var.set(str(self._cur()))
+        except (KeyError, IndexError, tk.TclError):
+            pass
+
+    def _apply(self, fn) -> None:
+        try:
+            cur = self._cur()
+        except (KeyError, IndexError):
+            return
+        new = self.app.coerce_number(cur, fn(cur))
+        if not guard_range(self.app, new, self.limits):
+            return
+        if self.put:
+            self.put(new)
+        else:
+            self.app.apply_set([self.path], lambda _o: new)
+
+    def _bump(self, sign: int) -> None:
+        try:
+            step = smart_step(self._cur())
+        except (KeyError, IndexError):
+            return
+        self._apply(lambda old: round(old + sign * step, 10))
+
+    def _quick(self, op: str, n: int) -> None:
+        self._apply(lambda old: n if op == "set" else (old + n if op == "add" else old * n))
+
+    def _commit(self) -> None:
+        try:
+            cur = self._cur()
+        except (KeyError, IndexError):
+            return
+        raw = self.var.get()
+        if raw != str(cur):
+            try:
+                new = core.parse_typed("number", raw)
+                self._apply(lambda _old: new)
+            except ValueError:
+                pass
+        try:
+            self.var.set(str(self._cur()))
+        except (KeyError, IndexError, tk.TclError):
+            pass
+
+
+class MiniField(tk.Frame):
+    """A small labelled entry for a number / short text field of an item."""
+
+    def __init__(self, parent, app, path: tuple, bg: str, fg: str, muted: str, label: str | None = None,
+                 hint: str | None = None):
+        super().__init__(parent, bg=bg)
+        self.app, self.path = app, path
+        lbl = tk.Label(self, text=label or core.humanize(path[-1]), bg=bg, fg=muted, font="SSESmall")
+        lbl.pack(anchor="w")
+        self.var = tk.StringVar()
+        self.entry = ttk.Entry(self, textvariable=self.var, width=9)
+        self.entry.pack(fill="x")
+        if hint:
+            Tooltip(self.entry, hint, app.pal)
+            Tooltip(lbl, hint, app.pal)
+        self.entry.bind("<Return>", lambda _e: self._commit())
+        self.entry.bind("<FocusOut>", lambda _e: self._commit())
+        self.refresh()
+
+    def _cur(self) -> Any:
+        return core.get_at(self.app.root_data[self.app.current_slot], self.path)
+
+    def refresh(self) -> None:
+        try:
+            if self.focus_get() is not self.entry:
+                self.var.set("" if self._cur() is None else str(self._cur()))
+        except (KeyError, IndexError, tk.TclError):
+            pass
+
+    def _commit(self) -> None:
+        try:
+            cur = self._cur()
+        except (KeyError, IndexError):
+            return
+        raw = self.var.get()
+        if raw != str(cur):
+            try:
+                if core.kind_of(cur) == "number":
+                    new = core.parse_typed("number", raw)
+                    self.app.apply_set([self.path], lambda old: self.app.coerce_number(old, new))
+                else:
+                    self.app.apply_set([self.path], lambda _o: raw)
+            except ValueError:
+                pass
+        try:
+            self.var.set(str(self._cur()))
+        except (KeyError, IndexError, tk.TclError):
+            pass
+
+
+class MemberCard(tk.Frame):
+    """A card with one Yes/No switch that is driven by get/put callbacks (unlocked locations, legends ...)."""
+
+    def __init__(self, parent, app, title: str, subtitle: str, get, put, icon: tuple[str, str] = ("✔", "#1f9d57"),
+                 hint: str | None = None):
+        pal = self.pal = app.pal
+        super().__init__(parent, bg=pal["card"], highlightthickness=1, highlightbackground=pal["border"], padx=12,
+                         pady=10)
+        self.app, self.get, self.put = app, get, put
+        head = tk.Frame(self, bg=pal["card"])
+        head.pack(fill="x")
+        cv = tk.Canvas(head, width=40, height=40, bg=pal["card"], highlightthickness=0)
+        cv.create_oval(2, 2, 38, 38, fill=icon[1], outline="")
+        cv.create_text(20, 20, text=icon[0], fill="#ffffff", font="SSEIcon")
+        cv.pack(side="left")
+        texts = tk.Frame(head, bg=pal["card"])
+        texts.pack(side="left", fill="x", expand=True, padx=(10, 0))
+        tk.Label(texts, text=title, bg=pal["card"], fg=pal["text"], font="SSEBold", anchor="w", justify="left",
+                 wraplength=170).pack(anchor="w", fill="x")
+        if subtitle:
+            tk.Label(texts, text=subtitle, bg=pal["card"], fg=pal["muted"], font="SSESmall", anchor="w",
+                     justify="left", wraplength=170).pack(anchor="w", fill="x")
+        if hint:
+            b = ttk.Button(head, text="?", width=2, style="Quick.TButton",
+                           command=lambda: messagebox.showinfo(title, hint, parent=app))
+            b.pack(side="right", anchor="n")
+            Tooltip(b, hint, pal)
+        row = tk.Frame(self, bg=pal["card"])
+        row.pack(fill="x", pady=(10, 0))
+        self.switch = tk.Canvas(row, width=56, height=28, bg=pal["card"], highlightthickness=0, cursor="hand2")
+        self.switch.pack(side="left")
+        self.label = tk.Label(row, text="", bg=pal["card"], font="SSEBold", cursor="hand2")
+        self.label.pack(side="left", padx=10)
+        for w in (self.switch, self.label):
+            w.bind("<Button-1>", lambda _e: self.put(not self.get()))
+        self.refresh()
+
+    def refresh(self) -> None:
+        on = bool(self.get())
+        color = paint_switch(self.switch, on, self.pal)
+        self.label.configure(text=tr("yes") if on else tr("no"), fg=color)

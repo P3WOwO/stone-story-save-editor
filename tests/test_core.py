@@ -40,20 +40,20 @@ def test_parser_types():
 def test_load_decrypts_all_profiles(save_file):
     root, slots = core.load_save(save_file)
     assert slots == ["save_file_1", "save_file_2"]
-    assert root["save_file_1"]["progress_data"]["gold"] == 1500
-    assert root["save_file_2"]["progress_data"]["player_name"] == "Second Run"
+    assert root["save_file_1"]["progress_data"]["xp"]["currentLevel"] == 12
+    assert root["save_file_2"]["progress_data"]["hero_settings"]["playerName"] == "Second Run"
 
 
 def test_write_creates_backup_and_roundtrips(save_file):
     root, slots = core.load_save(save_file)
-    root["save_file_1"]["progress_data"]["gold"] = 999999
+    root["save_file_1"]["progress_data"]["xp"]["currentXP"] = 999999
     backup = core.write_save(root, slots, save_file, backup_existing=True)
     assert backup is not None and backup.exists()
     assert core.list_backups(save_file) == [backup]
     again, _ = core.load_save(save_file)
-    assert again["save_file_1"]["progress_data"]["gold"] == 999999
+    assert again["save_file_1"]["progress_data"]["xp"]["currentXP"] == 999999
     old, _ = core.load_save(backup)
-    assert old["save_file_1"]["progress_data"]["gold"] == 1500
+    assert old["save_file_1"]["progress_data"]["xp"]["currentXP"] == 5400
 
 
 def test_looks_like_save(save_file, tmp_path):
@@ -83,24 +83,23 @@ def test_diff():
 
 
 def test_history_undo_redo(save_file):
+    import copy
     root, _ = core.load_save(save_file)
     h = core.History(root)
     s = "save_file_1"
-    snapshot = core.get_at(root[s], ())
-    import copy
-    before = copy.deepcopy(snapshot)
-    assert h.set_value(s, ("progress_data", "gold"), 10)
-    assert not h.set_value(s, ("progress_data", "gold"), 10)
-    h.add_item(s, ("progress_data", "stats"), "wins", 3)
-    h.add_item(s, ("progress_data", "inventory"), None, {"item": "X", "count": 1})
-    h.delete_item(s, ("progress_data", "maxHealth"))
-    h.delete_item(s, ("progress_data", "inventory", 0))
+    before = copy.deepcopy(root[s])
+    assert h.set_value(s, ("progress_data", "xp", "currentXP"), 10)
+    assert not h.set_value(s, ("progress_data", "xp", "currentXP"), 10)
+    h.add_item(s, ("progress_data", "misc"), "wins", 3)
+    h.add_item(s, ("progress_data", "inventory_data", "itms"), None, {"id": "x", "co": 1, "da": {}})
+    h.delete_item(s, ("progress_data", "xp", "currentLevel"))
+    h.delete_item(s, ("progress_data", "inventory_data", "itms", 0))
     after = copy.deepcopy(root[s])
     assert after != before
     while h.undo():
         pass
     assert root[s] == before
-    assert list(root[s]["progress_data"].keys()) == list(before["progress_data"].keys())
+    assert list(root[s]["progress_data"]["xp"].keys()) == list(before["progress_data"]["xp"].keys())
     while h.redo():
         pass
     assert root[s] == after
@@ -127,12 +126,14 @@ def test_grouped_undo(save_file):
     h = core.History(root)
     s = "save_file_1"
     g = h.new_group()
-    h.set_value(s, ("progress_data", "gold"), 1, group=g)
-    h.set_value(s, ("progress_data", "maxHealth"), 2, group=g)
-    assert root[s]["progress_data"]["gold"] == 1
-    assert len(h.undo()) == 2
-    assert root[s]["progress_data"]["gold"] == 1500
-    assert root[s]["progress_data"]["maxHealth"] == 120
-    assert len(h.redo()) == 2
-    assert root[s]["progress_data"]["maxHealth"] == 2
+    h.set_value(s, ("progress_data", "xp", "currentXP"), 1, group=g)
+    h.set_value(s, ("progress_data", "xp", "currentLevel"), 2, group=g)
+    h.add_item(s, ("progress_data", "misc"), "k", 1, group=g)
+    h.delete_item(s, ("progress_data", "misc", "flag"), group=g)
+    assert len(h.undo()) == 4
+    xp = root[s]["progress_data"]["xp"]
+    assert xp["currentXP"] == 5400 and xp["currentLevel"] == 12
+    assert "k" not in root[s]["progress_data"]["misc"] and "flag" in root[s]["progress_data"]["misc"]
+    assert len(h.redo()) == 4
+    assert root[s]["progress_data"]["xp"]["currentLevel"] == 2
     assert h.undo() and h.undo() == []

@@ -322,3 +322,50 @@ class FinderDialog(BaseDialog):
     def _close(self) -> None:
         self.stop.set()
         self.destroy()
+
+
+# --------------------------------------------------------------------------
+class PreviewDialog(BaseDialog):
+    """Shows old and new values (and how many parameters are affected) before a bulk change."""
+
+    MAX_ROWS = 400
+
+    def __init__(self, parent, title: str, palette: dict, rows: list[tuple[str, str, str]], unchanged: int = 0,
+                 note: str = "", ok_text: str | None = None):
+        super().__init__(parent, title, palette, "760x560")
+        self.minsize(560, 380)
+        self.accepted = False
+        ttk.Label(self, text=title, style="Title.TLabel").pack(anchor="w", padx=18, pady=(16, 2))
+        summary = tr("preview_summary", n=len(rows), same=unchanged)
+        ttk.Label(self, text=summary, font="SSEBold").pack(anchor="w", padx=18)
+        if note:
+            ttk.Label(self, text=note, style="Muted.TLabel", wraplength=700, justify="left"
+                      ).pack(anchor="w", padx=18, pady=(2, 0))
+        frame = ttk.Frame(self, style="Card.TFrame")
+        frame.pack(fill="both", expand=True, padx=18, pady=12)
+        frame.rowconfigure(0, weight=1)
+        frame.columnconfigure(0, weight=1)
+        tree = ttk.Treeview(frame, columns=("what", "old", "new"), show="headings", selectmode="none")
+        for col, w in (("what", 330), ("old", 170), ("new", 170)):
+            tree.heading(col, text=tr("chg_" + col))
+            tree.column(col, width=w, minwidth=80, anchor="w")
+        ys = ttk.Scrollbar(frame, orient="vertical", command=tree.yview)
+        tree.configure(yscrollcommand=ys.set)
+        tree.grid(row=0, column=0, sticky="nsew")
+        ys.grid(row=0, column=1, sticky="ns")
+        for what, old, new in rows[:self.MAX_ROWS]:
+            tree.insert("", "end", values=(what, old, new))
+        if len(rows) > self.MAX_ROWS:
+            tree.insert("", "end", values=(tr("preview_more", n=len(rows) - self.MAX_ROWS), "", ""))
+        btns = ttk.Frame(self)
+        btns.pack(fill="x", padx=18, pady=(0, 16))
+        ttk.Button(btns, text=tr("cancel"), command=self.destroy).pack(side="right")
+        ok = ttk.Button(btns, text=ok_text or tr("preview_apply"), style="Accent.TButton", command=self._ok)
+        ok.pack(side="right", padx=8)
+        ok.focus_set()
+        self.bind("<Return>", lambda _e: self._ok())
+        self.present()
+
+    def _ok(self) -> None:
+        self.accepted = True
+        self.destroy()

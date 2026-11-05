@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from . import core
+from . import catalog, core, knowledge
 from .i18n import tr
 
 
@@ -35,3 +35,25 @@ def kind_label(v: Any) -> str:
 def friendly_path(path: tuple) -> str:
     parts = [core.humanize(p) for p in path if p != "progress_data"]
     return " › ".join(parts) if parts else tr("whole_profile")
+
+
+def describe_path(profile: dict, path: tuple) -> str:
+    """Human description of a save path, e.g. 'Sword › Star level' or 'Events › spring › Premium pass'."""
+    rel = path[1:] if path and path[0] == "progress_data" else path
+    base = len(path) - len(rel)
+    if not rel:
+        return tr("whole_profile")
+    if rel[:2] == ("inventory_data", "itms") and len(rel) >= 3 and isinstance(rel[2], int):
+        try:
+            name = catalog.display_name(str(core.get_at(profile, path[:base + 3]).get("id")))
+        except (KeyError, IndexError, TypeError, AttributeError):
+            name = f"#{rel[2] + 1}"
+        rest = rel[3:]
+        if not rest:
+            return name
+        lab = knowledge.label(path)
+        return name + " › " + (lab or " › ".join(core.humanize(x) for x in rest))
+    parts = []
+    for i in range(len(rel)):
+        parts.append(knowledge.label(path[:base + i + 1]) or core.humanize(rel[i]))
+    return " › ".join(parts)

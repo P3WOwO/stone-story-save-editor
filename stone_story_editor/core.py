@@ -609,7 +609,8 @@ class History:
                       label=label, group=group))
         return True
 
-    def add_item(self, slot: str, parent_path: tuple, key: Any, value: Any, label: str = "") -> tuple:
+    def add_item(self, slot: str, parent_path: tuple, key: Any, value: Any, label: str = "",
+                 group: int | None = None) -> tuple:
         parent = get_at(self.root[slot], parent_path)
         if isinstance(parent, dict):
             if key in parent:
@@ -621,10 +622,10 @@ class History:
             path = parent_path + (len(parent) - 1,)
         else:
             raise TypeError("Can only add into an object or array")
-        self._push(Op(slot, "add", path, new=copy.deepcopy(value), index=len(parent) - 1, label=label))
+        self._push(Op(slot, "add", path, new=copy.deepcopy(value), index=len(parent) - 1, label=label, group=group))
         return path
 
-    def delete_item(self, slot: str, path: tuple, label: str = "") -> None:
+    def delete_item(self, slot: str, path: tuple, label: str = "", group: int | None = None) -> None:
         parent = get_at(self.root[slot], path[:-1])
         key = path[-1]
         if isinstance(parent, dict):
@@ -634,7 +635,7 @@ class History:
         else:
             raise TypeError("Cannot delete here")
         old = parent.pop(key)
-        self._push(Op(slot, "delete", path, old=copy.deepcopy(old), index=index, label=label))
+        self._push(Op(slot, "delete", path, old=copy.deepcopy(old), index=index, label=label, group=group))
 
     def _push(self, op: Op) -> None:
         self.undo_stack.append(op)

@@ -15,12 +15,17 @@ A friendly, safe save editor for **Stone Story RPG**. It decrypts your save, sho
 (or as a classic list), lets you change it, then encrypts and verifies the file again.
 No programming knowledge needed.
 
+![Home](docs/screenshot-home.png)
 ![Inventory](docs/screenshot-inventory.png)
-![Events and premium pass](docs/screenshot-events.png)
+![Add an item](docs/screenshot-wizard.png)
 
 <details>
 <summary>More screenshots (cards, dark theme, list view, welcome screen)</summary>
 
+![Events and premium pass](docs/screenshot-events.png)
+![Change preview](docs/screenshot-preview.png)
+![Catalogue, dark theme](docs/screenshot-catalog-dark.png)
+![Cosmetics, dark theme](docs/screenshot-cosmetics-dark.png)
 ![Cards view](docs/screenshot-cards-light.png)
 ![Dark theme](docs/screenshot-cards-dark.png)
 ![List view](docs/screenshot-list.png)
@@ -31,6 +36,11 @@ No programming knowledge needed.
 
 ## Features
 
+- **Home screen** – nine tiles: Inventory, Resources, Cosmetics, Player, Quests, Events, Progress, Locations and the Item catalogue.
+- **Item catalogue** – search real Stone Story RPG items by name with categories, subcategories, IDs, descriptions and recipes. Type, hand, element, stars and enchantment are **separate** characteristics.
+- **Add items without JSON** – pick an item by name, set amount, stars, shiny, element and enchantment; the structure is copied from your own items. Items whose ID is not in the sources cannot be added blindly.
+- **Explanations** – a "?" next to game parameters (Level, XP, Shiny, Enchantments, Lost items, Premium pass ...). Unknown fields are never guessed.
+- **Change preview** – before any bulk edit you see old and new values and how many parameters are affected.
 - **Sections** – Inventory, Events & pass, Player, Resources, Quests, Progress, Locations, Cosmetics, Time, Other. Pick a section and see only its values.
 - **Inventory manager** – a card per item: amount (`−` / `+`, quick `+10`, `+100`, `×2`), tick boxes (e.g. *shiny*), stars/enchant fields, add / duplicate / delete items, change the amount of all shown items at once, clear the inventory.
 - **Events & premium pass** – a *Premium pass* switch (the `pp` field) for every event, one-click **Give premium pass everywhere**, points/levels of the reward track for all events at once.
@@ -76,6 +86,11 @@ Use **Find my save automatically**. According to the game's official FAQ the fil
 
 The game also keeps `backup.txt` and `historical_#` files there.
 
+## Data accuracy
+
+The catalogue, names and hints use only published sources (game FAQ, community wiki, the save layout documented by the
+SSRPGS project). IDs are shown with their source; unknown IDs stay unknown. Details: [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md).
+
 ## About the sections
 
 The save's field names are not officially documented, so sections are detected from **key words**
@@ -111,6 +126,9 @@ Project layout:
 | `stone_story_editor/gui.py` | tkinter interface (sections sidebar, cards, list, tree, changes) |
 | `stone_story_editor/views.py` | inventory manager and events / premium pass view |
 | `stone_story_editor/sections.py` | key-word based section detection (no GUI) |
+| `stone_story_editor/catalog.py`, `catalog_ui.py` | item catalogue, search, add-item wizard |
+| `stone_story_editor/knowledge.py`, `knowledge_data.py` | real names and explanations of fields |
+| `stone_story_editor/pages.py`, `ops.py` | section pages and undoable list edits |
 | `stone_story_editor/cards.py` | value cards (icon, +/- buttons, switches) |
 | `stone_story_editor/i18n.py` | Russian / English texts and help |
 | `stone_story_editor/theme.py` | light / dark palettes |
@@ -120,6 +138,8 @@ Project layout:
 To publish releases: push a tag such as `v2.0.0`; the workflow in `.github/workflows/release.yml` attaches the `.exe`.
 
 ## Credits & license
+
+The save layout and game names were studied from the [SSRPGS](https://github.com/Catalyst-42/SSRPGS) project (reference only, no code copied) and the community wiki.
 
 Encryption parameters follow the publicly documented save format (SSRPGS cryptor). Uses
 [`pprp`](https://pypi.org/project/pprp/) for Rijndael-256. Released under the [MIT License](LICENSE).

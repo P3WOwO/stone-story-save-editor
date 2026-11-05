@@ -53,10 +53,11 @@ RULES: dict[str, tuple[set[str], tuple[str, ...]]] = {
 }
 
 PASS_WORDS = {"pp", "premium", "paid", "pass"}
-POINT_WORDS = {"points", "point", "pts", "level", "tier"}
+POINT_WORDS = {"points", "point", "pts", "level", "tier", "rp"}
 PROGRESS_WORDS = POINT_WORDS | {"progress", "xp", "score", "stage"}
 NAME_KEYS = ("name", "id", "item", "item_id", "itemid", "type", "key", "kind", "label")
-COUNT_KEYS = ("count", "amount", "quantity", "qty", "stack", "num", "number", "q", "n", "c")
+COUNT_KEYS = ("co", "count", "amount", "quantity", "qty", "stack", "num", "number", "q", "n", "c")
+INVENTORY_PATH = ("progress_data", "inventory_data", "itms")
 
 
 def tokens(key: Any) -> set[str]:
@@ -79,8 +80,39 @@ def component_category(comp: Any) -> str | None:
     return None
 
 
+# Exact places documented for the game's save (progress_data.*). The longest matching prefix wins.
+REAL_RULES: list[tuple[tuple, str]] = sorted([
+    (("inventory_data", "itms"), "inventory"),
+    (("inventory_data", "Stone"), "resources"), (("inventory_data", "Wood"), "resources"),
+    (("inventory_data", "Tar"), "resources"), (("inventory_data", "Xi"), "resources"),
+    (("inventory_data", "Bronze"), "resources"),
+    (("cosmetics",), "cosmetics"), (("hero_settings",), "player"), (("xp",), "player"), (("events",), "events"),
+    (("custom_quests", "active"), "quests"), (("custom_quests", "nextSpawnDate"), "quests"),
+    (("custom_quests", "epicSpawnPending"), "quests"), (("custom_quests", "basicQuestDate"), "quests"),
+    (("weekly_quest",), "quests"),
+    (("custom_quests", "revealed"), "progress"), (("custom_quests", "records"), "progress"),
+    (("quest_data", "available"), "progress"),
+    (("quest_data", "star_levels"), "locations"), (("quest_data", "stats"), "locations"),
+    (("quest_data",), "time"), (("treasure_factory",), "time"), (("crypt_intro",), "time"),
+    (("custom_quests", "referral"), "time"), (("custom_quests", "scotRef"), "time"),
+], key=lambda r: -len(r[0]))
+
+
+def _real_rule(path: tuple) -> str | None:
+    rel = path[1:] if path and path[0] == "progress_data" else None
+    if rel is None:
+        return None
+    for prefix, cat in REAL_RULES:
+        if rel[:len(prefix)] == prefix:
+            return cat
+    return None
+
+
 def classify(path: tuple) -> str:
-    """Which section a value belongs to. The outermost matching key wins."""
+    """Which section a value belongs to. Known save locations first, then key words (outermost key wins)."""
+    known = _real_rule(path)
+    if known:
+        return known
     if path and path[0] != "progress_data" and len(path) == 1:
         return "player"          # profile fields (name, version ...)
     for comp in path:
@@ -134,6 +166,12 @@ def _walk_containers(data: Any, path: tuple = (), depth: int = 0) -> Iterator[tu
 
 def find_inventory(profile: dict) -> InventoryRef | None:
     """Best guess for the player's item list: an inventory-looking list/map with the most entries."""
+    try:
+        real = core.get_at(profile, INVENTORY_PATH)
+        if isinstance(real, list):
+            return InventoryRef(INVENTORY_PATH, "list")
+    except (KeyError, IndexError, TypeError):
+        pass
     best: tuple[int, InventoryRef] | None = None
     for path, node in _walk_containers(profile):
         if not path:

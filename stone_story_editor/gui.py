@@ -14,11 +14,19 @@ from tkinter import ttk, filedialog, messagebox
 
 from . import __version__, config, core, theme
 from .cards import ValueCard, icon_for, smart_step  # noqa: F401
-from .common import display_value, fmt_num, friendly_path, kind_label
+from .common import describe_path, display_value, fmt_num, friendly_path, kind_label
 from . import sections as sec
 from .i18n import tr, set_language, current_language, help_sections
+from . import catalog, knowledge
+from .catalog_ui import CatalogTab
+from .pages import CosmeticsPage, LocationsPage, PlayerPage, ProgressPage, QuestsPage, ResourcesPage
 from .views import EventsView, InventoryView
-from .widgets import FinderDialog, PickDialog, TextDialog, Tooltip, ValueDialog
+
+SPECIAL = {"inventory": InventoryView, "events": EventsView, "player": PlayerPage, "resources": ResourcesPage,
+           "cosmetics": CosmeticsPage, "quests": QuestsPage, "progress": ProgressPage, "locations": LocationsPage}
+SEARCH_KINDS = {"inventory", "cosmetics"}       # pages where the search box is useful
+PRIMARY = ("inventory", "resources", "cosmetics", "player", "quests", "events", "progress", "locations")
+from .widgets import FinderDialog, PickDialog, PreviewDialog, TextDialog, Tooltip, ValueDialog
 
 MAX_ROWS = 3000          # rows shown at once in the simple list
 BIG_INT = 2 ** 31        # values beyond this may overflow the game's counters
@@ -89,10 +97,13 @@ class EditPanel(ttk.Frame):
     def _show_one(self, path: tuple, value: Any) -> None:
         app = self.app
         kind = core.kind_of(value)
-        name = core.humanize(path[-1]) if path else tr("whole_profile")
+        name = (knowledge.label(path) or core.humanize(path[-1])) if path else tr("whole_profile")
         self._label(name, "H1.TLabel")
         self._label(friendly_path(path[:-1]) if len(path) > 1 else "", "CardMuted.TLabel")
         self._label(f"{tr('technical_key')}: {core.path_str(path) or '—'}", "CardMuted.TLabel")
+        known_hint = knowledge.hint_for(path)
+        if known_hint:
+            self._label(known_hint, "Card.TLabel")
 
         changed = path in app.changed_paths(app.current_slot)
         if kind in ("object", "array"):
@@ -411,8 +422,9 @@ class ContentTab(ttk.Frame):
         for path, _v in core.iter_leaves(profile):
             if path in TECH_PATHS or not path:
                 continue
-            name = core.humanize(path[-1])
-            section = " › ".join(core.humanize(x) for x in path[:-1] if x != "progress_data")
+            name = knowledge.label(path) or core.humanize(path[-1])
+            section = " › ".join(knowledge.label(path[:i + 1]) or core.humanize(x)
+                                 for i, x in enumerate(path[:-1]) if x != "progress_data")
             if not section and path[0] != "progress_data":
                 section = tr("section_profile")
             self.leaves.append((path, name, section, sec.classify(path)))
@@ -465,11 +477,11 @@ class ContentTab(ttk.Frame):
     # ---- sections (inventory / events get a dedicated view) ----
     def _bar_mode(self, kind: str | None) -> None:
         """Dedicated views hide the filter chips / view switch (and the whole bar for events)."""
-        if kind == "events":
+        if kind and kind not in SEARCH_KINDS:
             self.top.grid_remove()
             return
         self.top.grid()
-        if kind == "inventory":
+        if kind in SEARCH_KINDS:
             self.chips.pack_forget()
             self.viewbar.pack_forget()
         else:
@@ -479,7 +491,7 @@ class ContentTab(ttk.Frame):
                 self.viewbar.pack(side="right")
 
     def _special_kind(self) -> str | None:
-        if self.category in ("inventory", "events") and self.category not in self.special_off:
+        if self.category in SPECIAL and self.category not in self.special_off:
             return self.category
         return None
 
@@ -500,7 +512,7 @@ class ContentTab(ttk.Frame):
         if self.special is None or self.special_kind != kind:
             if self.special is not None:
                 self.special.destroy()
-            cls = InventoryView if kind == "inventory" else EventsView
+            cls = SPECIAL[kind]
             self.special = cls(self, self.app, self)
             self.special_kind = kind
         self.special.grid(row=1, column=0, columnspan=2, sticky="nsew")
@@ -517,7 +529,7 @@ class ContentTab(ttk.Frame):
             self.special_kind = None
         self._apply_view()
         self._bar_mode(None)
-        if self.category in ("inventory", "events") and self.category in self.special_off:
+        if self.category in SPECIAL and self.category in self.special_off:
             self.smart_btn.pack(side="right", padx=6)
         else:
             self.smart_btn.pack_forget()
@@ -595,7 +607,7 @@ class ContentTab(ttk.Frame):
                             font="SSEBold", anchor="w")
             cards = []
             for path, name, sec, v, _k in items:
-                card = ValueCard(self.inner, self, path, name, "", v)
+                card = ValueCard(self.inner, self, path, name, "", v, hint=knowledge.hint_for(path))
                 self.cards[path] = card
                 cards.append(card)
             self._sections.append((head, cards))
@@ -731,7 +743,7 @@ class SimpleTab(ttk.Frame):
         self.content.load_profile(reset)
         counts = self.content.cat_counts
         cat = self.cat_var.get()
-        if cat != "all" and not counts.get(cat):
+        if cat != "all" and cat not in PRIMARY and not counts.get(cat):
             self.cat_var.set("all")
             self.content.category = "all"
             self.content.refresh()
@@ -747,10 +759,74 @@ class SimpleTab(ttk.Frame):
             rb = self.cat_buttons[cid]
             rb.pack_forget()
             n = total if cid == "all" else counts.get(cid, 0)
-            if cid != "all" and n == 0:
+            if cid != "all" and n == 0 and cid not in PRIMARY:
                 continue
             rb.configure(text=f"{self.CAT_ICONS[cid]}   {tr('cat_' + cid)}   ({n})")
             rb.pack(fill="x", pady=1)
+
+
+# --------------------------------------------------------------------------
+# Home tab: what do you want to change?
+# --------------------------------------------------------------------------
+class HomeTab(ttk.Frame):
+    TILES = [("inventory", "▣", "#0e8f9e"), ("resources", "$", "#d99a00"), ("cosmetics", "✦", "#a855f7"),
+             ("player", "☺", "#3b6cf6"), ("quests", "⚑", "#c2571a"), ("events", "★", "#d64545"),
+             ("progress", "✔", "#1f9d57"), ("locations", "⌂", "#3b6cf6"), ("catalog", "⌕", "#7a5cf0")]
+
+    def __init__(self, parent, app: "App"):
+        super().__init__(parent, padding=(10, 14))
+        self.app = app
+        self.counts: dict[str, ttk.Label] = {}
+        ttk.Label(self, text=tr("home_title"), style="Title.TLabel").pack(anchor="w")
+        self.profile_lbl = ttk.Label(self, text="", style="Muted.TLabel")
+        self.profile_lbl.pack(anchor="w", pady=(0, 12))
+        grid = ttk.Frame(self)
+        grid.pack(fill="x", anchor="n")
+        for i, (cid, icon, color) in enumerate(self.TILES):
+            tile = self._tile(grid, cid, icon, color)
+            tile.grid(row=i // 3, column=i % 3, padx=6, pady=6, sticky="nsew")
+            grid.columnconfigure(i % 3, weight=1, uniform="tile")
+        ttk.Label(self, text=tr("home_tip"), style="Muted.TLabel", wraplength=900, justify="left"
+                  ).pack(anchor="w", pady=(12, 0))
+
+    def _tile(self, parent, cid: str, icon: str, color: str) -> tk.Frame:
+        pal = self.app.pal
+        tile = tk.Frame(parent, bg=pal["card"], highlightthickness=1, highlightbackground=pal["border"],
+                        padx=14, pady=10, cursor="hand2")
+        cv = tk.Canvas(tile, width=52, height=52, bg=pal["card"], highlightthickness=0, cursor="hand2")
+        cv.create_oval(2, 2, 50, 50, fill=color, outline="")
+        cv.create_text(26, 26, text=icon, fill="#ffffff", font="SSEIcon")
+        cv.pack(side="left", anchor="n")
+        box = tk.Frame(tile, bg=pal["card"], cursor="hand2")
+        box.pack(side="left", fill="x", expand=True, padx=(12, 0))
+        title = tr("catalog_tile") if cid == "catalog" else tr("cat_" + cid)
+        tk.Label(box, text=title, bg=pal["card"], fg=pal["text"], font="SSEBold", anchor="w").pack(anchor="w")
+        tk.Label(box, text=tr("home_" + cid), bg=pal["card"], fg=pal["muted"], anchor="w", justify="left",
+                 wraplength=250).pack(anchor="w")
+        cnt = tk.Label(box, text="", bg=pal["card"], fg=pal["accent"], font="SSESmall", anchor="w")
+        cnt.pack(anchor="w", pady=(4, 0))
+        self.counts[cid] = cnt
+        for w in [tile, cv, box] + list(box.winfo_children()):
+            w.bind("<Button-1>", lambda _e, c=cid: self.app.goto(c))
+        return tile
+
+    def refresh(self) -> None:
+        app = self.app
+        if app.root_data is None or app.current_slot is None:
+            return
+        p = app.root_data[app.current_slot]
+        name = (p.get("player_name") or tr("no_name")) if isinstance(p, dict) else ""
+        try:
+            lvl = core.get_at(p, ("progress_data", "xp", "currentLevel"))
+        except (KeyError, IndexError, TypeError):
+            lvl = None
+        self.profile_lbl.configure(text=tr("home_profile", name=name) + (f" · {tr('level_short', n=lvl)}" if lvl is not None else ""))
+        counts = app.simple.content.cat_counts
+        for cid, lbl in self.counts.items():
+            if cid == "catalog":
+                lbl.configure(text=tr("catalog_count_short", n=len(catalog.ITEMS)))
+            else:
+                lbl.configure(text=tr("home_count", n=counts.get(cid, 0)))
 
 
 # --------------------------------------------------------------------------
@@ -1214,10 +1290,14 @@ class App(tk.Tk):
 
         self.nb = ttk.Notebook(self.editor)
         self.nb.pack(fill="both", expand=True)
+        self.home = HomeTab(self.nb, self)
         self.simple = SimpleTab(self.nb, self)
+        self.catalog_tab = CatalogTab(self.nb, self)
         self.tree_tab = TreeTab(self.nb, self)
         self.changes_tab = ChangesTab(self.nb, self)
+        self.nb.add(self.home, text="  " + tr("tab_home") + "  ")
         self.nb.add(self.simple, text="  " + tr("tab_simple") + "  ")
+        self.nb.add(self.catalog_tab, text="  " + tr("tab_catalog") + "  ")
         self.nb.add(self.tree_tab, text="  " + tr("tab_tree") + "  ")
         self.nb.add(self.changes_tab, text="  " + tr("tab_changes") + "  ")
 
@@ -1256,11 +1336,13 @@ class App(tk.Tk):
     def _focus_search(self) -> None:
         if self.root_data is None:
             return
-        tab = self.nb.index(self.nb.select())
-        if tab == 0:
+        cur = self.nb.nametowidget(self.nb.select())
+        if cur is self.simple:
             self.simple.search.focus_set()
-        elif tab == 1:
+        elif cur is self.tree_tab:
             self.tree_tab.search_entry.focus_set()
+        elif cur is self.catalog_tab:
+            self.catalog_tab.list.entry.focus_set()
 
     # --------------------------------------------------------- small helpers
     def say(self, text: str) -> None:
@@ -1342,7 +1424,7 @@ class App(tk.Tk):
             self.dirty_var.set(tr("unsaved_n", n=n) if n else tr("all_saved"))
             self.dirty_label.configure(foreground=self.pal["warn"] if n else self.pal["ok"])
             try:
-                self.nb.tab(2, text="  " + tr("tab_changes") + (f" ({len(self.diffs(self.current_slot))})"
+                self.nb.tab(self.changes_tab, text="  " + tr("tab_changes") + (f" ({len(self.diffs(self.current_slot))})"
                                                                  if self.diffs(self.current_slot) else "") + "  ")
             except tk.TclError:
                 pass
@@ -1350,6 +1432,8 @@ class App(tk.Tk):
             self.dirty_var.set("")
             self.status_var.set(tr("ready"))
         self.file_label.configure(text=str(self.file_path.name) if self.file_path else "")
+        if loaded and hasattr(self, "home"):
+            self.home.refresh()
 
     # ------------------------------------------------------------- opening
     def open_dialog(self) -> None:
@@ -1392,7 +1476,7 @@ class App(tk.Tk):
         self.show_editor()
         self._fill_profiles(keep=self.current_slot)
         self._reload_views()
-        self.nb.select(0)
+        self.nb.select(self.home)
         self.say(tr("opened", name=self.file_path.name, n=len(slots)))
         self._update_state()
 
@@ -1438,9 +1522,11 @@ class App(tk.Tk):
             return int(round(new))
         return new
 
-    def apply_set(self, paths: list[tuple], fn: Callable[[Any], Any]) -> None:
+    def apply_set(self, paths: list[tuple], fn: Callable[[Any], Any], preview: bool = True,
+                  title: str | None = None, note: str = "") -> bool:
+        """Change several values at once. Bulk changes (2+ values) show a before/after preview first."""
         if self.root_data is None or self.current_slot is None:
-            return
+            return False
         slot = self.current_slot
         data = self.root_data[slot]
         planned = []
@@ -1450,8 +1536,16 @@ class App(tk.Tk):
                 new = fn(old)
             except Exception as exc:  # noqa: BLE001
                 messagebox.showerror(tr("err_bad_value"), str(exc), parent=self)
-                return
+                return False
             planned.append((p, old, new))
+        differing = [(p, o, n) for p, o, n in planned if not (type(o) is type(n) and o == n)]
+        if preview and len(differing) > 1:
+            rows = [(describe_path(data, p), display_value(o), display_value(n)) for p, o, n in differing]
+            dlg = PreviewDialog(self, title or tr("preview_title"), self.pal, rows,
+                                unchanged=len(planned) - len(differing), note=note)
+            self.wait_window(dlg)
+            if not dlg.accepted:
+                return False
         big = [n for _p, o, n in planned if isinstance(n, (int, float)) and not isinstance(n, bool)
                and abs(n) >= BIG_INT and not (isinstance(o, (int, float)) and abs(o) >= BIG_INT)]
         if big and not messagebox.askyesno(tr("big_title"), tr("big_text", v=fmt_num(big[0])), icon="warning",
@@ -1467,7 +1561,7 @@ class App(tk.Tk):
                 messagebox.showerror(tr("err_bad_value"), str(exc), parent=self)
                 return
         if not changed_paths:
-            return
+            return False
         self._invalidate(slot)
         containers = [p for p in changed_paths if not core.is_leaf(core.get_at(self.root_data[slot], p))]
         if containers:
@@ -1483,10 +1577,40 @@ class App(tk.Tk):
                         v=display_value(core.get_at(self.root_data[slot], changed_paths[0]))))
         else:
             self.say(tr("changed_many", n=len(changed_paths)))
+        return True
 
     def _refresh_panels(self) -> None:
         self.simple.panel.show(self.simple.panel.paths)
         self.tree_tab.panel.show(self.tree_tab.panel.paths)
+
+    def goto(self, target: str) -> None:
+        """Jump from the Home tiles to a section page (or the catalogue)."""
+        if target == "catalog":
+            self.nb.select(self.catalog_tab)
+            return
+        self.nb.select(self.simple)
+        self.simple.cat_var.set(target)
+        self.simple._cat_changed()
+
+    def run_ops(self, fn: Callable, rows: list | None = None, title: str | None = None, note: str = "") -> bool:
+        """Run list/record edits as one undo step; bulk edits (2+ rows) show a before/after preview first."""
+        if self.root_data is None or self.current_slot is None:
+            return False
+        if rows is not None and len(rows) > 1:
+            dlg = PreviewDialog(self, title or tr("preview_title"), self.pal, rows, note=note)
+            self.wait_window(dlg)
+            if not dlg.accepted:
+                return False
+        group = self.history.new_group()
+        try:
+            changed = fn(self.history, self.current_slot, group)
+        except Exception as exc:  # noqa: BLE001
+            messagebox.showerror(tr("err_bad_value"), str(exc), parent=self)
+            return False
+        if changed:
+            self.after_structural_edit()
+            self.say(tr("changed_many", n=int(changed)))
+        return bool(changed)
 
     def after_structural_edit(self) -> None:
         slot = self.current_slot
@@ -1534,7 +1658,7 @@ class App(tk.Tk):
         self.say(tr("deleted_ok", path=core.path_str(path)))
 
     def show_in_tree(self, path: tuple) -> None:
-        self.nb.select(1)
+        self.nb.select(self.tree_tab)
         self.tree_tab.reveal(path)
 
     def undo(self) -> None:
